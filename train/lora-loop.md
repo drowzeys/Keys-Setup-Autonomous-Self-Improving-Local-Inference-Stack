@@ -45,8 +45,12 @@ For the highest-value signal, have the router append one line per decision to
  "verdict": "the chosen/merged answer", "cloud_gold": null, "ts": "..."}
 ```
 Set `cloud_gold` to the cloud answer whenever a task was escalated — that is the gold the
-local stack failed on, and it is weighted 2× in training. Until this log exists, the miner
-falls back to kanban outcomes + captured request dumps (already works today).
+local stack failed on, and it is weighted 2× in training.
+
+**Status: LIVE.** The two-hook pipeline (`routing_router.py` pre_llm_call +
+`routing_log.py` post_llm_call) is installed, allowlisted, and firing. Every Hermes
+LLM call is now logged to `~/.hermes/routing_log.jsonl` with task, verdict, chosen agent,
+route type, and cloud_gold flag. The log is ready for `mine_signal.py` consumption.
 
 ## Cadence, eval-gate, rollback
 - **Trigger:** Hermes runs a cycle nightly (cron) or after ≥`MIN_PAIRS` (default 50) new pairs.

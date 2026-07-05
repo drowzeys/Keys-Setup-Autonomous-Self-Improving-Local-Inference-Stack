@@ -78,7 +78,27 @@ trends down over time. Log routing decisions + verdicts to the training-signal s
 miner has material. Prefer local aggregation (DSV4F voting across reference agents) over a
 cloud call whenever the local drafts agree — that alone reclaims most would-be escalations.
 
-## 5. Quick checks
+## 5. Routing implementation (live hooks)
+
+The routing policy above is implemented as two Hermes shell hooks:
+
+| Hook | Script | Purpose |
+|------|--------|---------|
+| `pre_llm_call` | `router/routing_router.py` | Classifies task, picks cheapest competent agent, writes decision to `_last_routing.json` |
+| `post_llm_call` | `router/routing_log.py` | Captures task+verdict, reads routing decision, appends to `routing_log.jsonl` |
+
+The classifier uses regex patterns to categorize tasks:
+- **Light**: keyword prefixes (classif, extract, summar, etc.) or <100 chars
+- **Gen-heavy**: generate, produce, create, write, batch, render, etc.
+- **Hard**: audit, security, vulnerability, research, complex, etc.
+- **Multimodal**: image, photo, audio, video keywords or content arrays
+- **MoA**: everything else (complex/ambiguous -> DSV4F fan-out)
+
+When a task is classified as "hard", `cloud_gold` is set to `"cloud"` so
+`mine_signal.py` weights it 2x in training — every cloud escalation buys a
+permanent local capability.
+
+## 6. Quick checks
 
 - `hermes moa list` — see current slots
 - `hermes moa configure` — set the local-first preset above
