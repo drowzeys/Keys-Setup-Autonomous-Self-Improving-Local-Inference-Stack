@@ -25,38 +25,6 @@ The roster:
 - ⚡ **Qwen3.6-27B-NVFP4** — the **light tier**. 256K context, ~68 tokens/sec at 8-way concurrency, native fp4 attention. It soaks up the long tail of easy requests so the brain stays free for the hard ones.
 - ☁️ **A rate-limited cloud model** (Claude / Codex / Grok) — the **oracle**. Audit, genuinely hard reasoning, open-web research. Deliberately kept to ~10% of traffic.
 
-## The architecture, in one picture
-
-```
-        audio · image · video · text
-                    │
-                    ▼
-        ┌───────────────────────────┐
-        │   Nemotron-3-Omni         │  perception → structured text
-        └───────────────┬───────────┘
-                        ▼
-        ┌───────────────────────────────────────┐
-        │   HERMES MoA ROUTER · DSV4-Flash       │  cheapest competent agent
-        │   classify · decompose · delegate      │
-        └──┬─────────┬──────────┬────────────┬───┘
-      easy │  percep │  gen-heavy│   hard / audit (~10%)
-           ▼         ▼          ▼            ▼
-     ┌──────────┐ ┌───────┐ ┌──────────┐ ┌──────────────┐
-     │ Qwen3.6  │ │ Omni  │ │ Two-Tower│ │ CLOUD oracle │
-     │ 27B light│ │ recall│ │ diffusion│ │ Claude/Codex │
-     └────┬─────┘ └───┬───┘ └────┬─────┘ └──────┬───────┘
-          └───────────┴──────────┴──────────────┘
-                        ▼
-        ┌───────────────────────────────────────┐
-        │   DSV4F AGGREGATE / VOTE → answer ─────────▶ user
-        │   + log(task, route, drafts, verdict)  │
-        └───────────────┬───────────────────────┘
-                        ▼   self-improvement loop
-   routing_log.jsonl ─▶ mine_signal.py ─▶ Gemma-4-12B LoRA ─▶ hot-swap adapter
-          ▲                                                        │
-          └──────────  local share grows, cloud shrinks  ◀─────────┘
-```
-
 ## The part that makes it *self-improving*
 
 Here's the loop that matters. Because the DSV4F orchestrator sees **every** task, **every** routing decision, and **every** aggregate verdict, its log *is* a training set — for free.
@@ -71,40 +39,6 @@ Those pairs go to **Gemma-4-12B — the student.** It LoRA-trains on them and pr
 But here's the part most "local AI" setups miss: Gemma doesn't just learn better *answers*. It trains on the router's own decisions too — **which agent should handle which task** (the routing) and **which draft should win** (the aggregation). So the thing that improves isn't just the leaf models — it's the **MoA logic itself.** The router gets sharper at routing; the aggregator gets sharper at picking. The whole stack levels up, not just its parts.
 
 The whole thing is one command Hermes can run on a timer: mine its own history → LoRA-train Gemma → eval-gate → hot-swap. It literally **self-trains from its own work log.**
-
-```
-        ┌──────────────────────────────────────────────────────────┐
-        │  EVERY served request  (Hermes / DSV4F routing log)       │
-        │  task · chosen_agent · candidate drafts · verdict · gold? │
-        └───────────────────────────┬──────────────────────────────┘
-                                    ▼
-                       ┌──────────────────────────┐
-                       │  mine_signal.py           │  pick highest-value pairs
-                       └──────────────┬───────────┘
-             ┌──────────────┬─────────┴────────┬──────────────────┐
-             ▼              ▼                  ▼                  ▼
-      cloud-gold     local wins         ROUTING pairs      AGGREGATION pairs
-      (was wrong,   (self-distill)    which agent per     which draft wins
-       weight 2×)                      task  →┐            →┐
-             └──────────────┴──────────────┐  │             │
-                                           ▼  ▼             ▼
-                       ┌───────────────────────────────────────────┐
-                       │  Gemma-4-12B  ·  LoRA fine-tune            │
-                       │  learns answers  AND  the MoA logic itself │
-                       └───────────────────────┬───────────────────┘
-                                               ▼
-                                       ┌───────────────┐
-                                       │  eval-gate     │  promote only if ≥ current
-                                       └───────┬────────┘
-                                               ▼  hot-swap adapter
-        ┌──────────────────────────────────────────────────────────┐
-        │  serving stack sharper: router routes better, aggregator  │
-        │  votes better, specialists answer more →  next same-class  │
-        │  task handled LOCALLY, no cloud call                       │
-        └───────────────────────────┬──────────────────────────────┘
-                                    │
-                                    └──▶ local share ↑ · cloud bill ↓  (repeat)
-```
 
 **Every cloud escalation buys a permanent local capability.** The cloud bill trends *down* over time. The 90/10 split becomes 92/8 becomes 95/5 — automatically — because the "cheapest competent agent" keeps getting more competent, *and gets better at knowing which agent is cheapest.*
 
