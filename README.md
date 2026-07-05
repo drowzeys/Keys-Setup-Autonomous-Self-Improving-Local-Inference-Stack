@@ -16,6 +16,13 @@
 
 ---
 
+> **Only have one DGX Spark?** The whole stack collapses onto a single GB10 with the **same routing
+> logic and LoRA loop** — see **[docs/single-spark-recipe.md](docs/single-spark-recipe.md)**:
+> an all-Gemma-4 build (Gemma-4-31B brain + DiffusionGemma + Gemma-4-12B) with architecture +
+> routing-decision diagrams and a Hermes-consumable [MoA activation plan](router/moa-plan.single-spark.json).
+
+---
+
 ## 0. Prerequisites — model roster & role on the stack
 
 | # | Model (as served) | Quant / runtime | Where it lives | Role in the stack |

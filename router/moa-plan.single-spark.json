@@ -1,0 +1,28 @@
+{
+  "moa_plan": "single-spark",
+  "node": "localhost",
+  "aggregator": { "id": "gemma4-31b", "endpoint": "http://localhost:8000/v1" },
+  "reference_models": [
+    { "id": "gemma4-12b", "endpoint": "http://localhost:8002/v1",
+      "competence": ["light", "classify", "extract", "summarize", "rewrite", "short_chat"], "cost": 1 },
+    { "id": "diffusiongemma", "endpoint": "http://localhost:8001/v1",
+      "competence": ["gen_heavy", "interactive", "perception", "multimodal"], "cost": 1 }
+  ],
+  "fallback": [
+    { "id": "cloud", "providers": ["openai-codex:gpt-5.5", "openrouter:anthropic/claude-opus-4.8", "grok"],
+      "cost": 100, "use": "hard_or_novel_only" }
+  ],
+  "routing": {
+    "perception_first": true,
+    "rule": "cheapest_competent_agent",
+    "escalation_gate": { "metric": "aggregate_confidence", "threshold": 0.6, "on_fail": "fallback" },
+    "target_local_share": 0.9
+  },
+  "self_improvement": {
+    "log": "~/.hermes/routing_log.jsonl",
+    "student": "gemma4-12b",
+    "cycle": "~/keys-setup-stack/train/run-lora-cycle.sh",
+    "cloud_gold_weight": 2.0,
+    "trigger": "nightly OR >=50 new pairs"
+  }
+}
