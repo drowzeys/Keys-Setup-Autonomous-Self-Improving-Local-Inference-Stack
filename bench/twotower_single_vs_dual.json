@@ -1,0 +1,19 @@
+{
+  "model": "Nemotron-Labs-TwoTower-30B-A3B (NVFP4 experts, e2m1 + block-16 scale)",
+  "hardware": "DGX Spark GB10 (sm_121a), 128GB unified",
+  "measured": "2026-07-05, same session, 256 output tokens, greedy where noted",
+  "note": "Single-GPU points measured on node .3 via persistent tt-server (:8010) and the AR baseline (twotower_dist.py --mode ar). Dual-GPU bench256 is the cross-node NVFP4 v3 result. Single-GPU diffusion vs co-residency confound checked: standalone 28.98 ~= co-resident-with-Omni 29.54, so co-residency is not the bottleneck.",
+  "points": [
+    {"deployment": "dual_gpu_2spark", "method": "mask_diffusion", "prompt": "France is a country (gen-heavy bench256)", "nfe": 66, "tok_s": 38.85, "winner_context": "fastest overall (towers parallel on 2 GPUs)"},
+    {"deployment": "single_gpu_1spark", "method": "mask_diffusion", "prompt": "France is a country (gen-heavy bench256)", "nfe": 100, "tok_s": 28.98, "peak_alloc_gb": 46.5, "peak_reserved_gb": 55.4},
+    {"deployment": "single_gpu_1spark", "method": "mask_diffusion", "prompt": "The city of Paris is (coherent)", "nfe": 166, "tok_s": 17.94},
+    {"deployment": "single_gpu_1spark", "method": "mask_diffusion", "prompt": "The city of Paris is (coherent, standalone/Omni-off)", "nfe": 200, "tok_s": 15.07},
+    {"deployment": "single_gpu_1spark", "method": "ar_simulated", "prompt": "France is a country (gen-heavy)", "tok_s": 18.44},
+    {"deployment": "single_gpu_1spark", "method": "ar_simulated", "prompt": "The city of Paris is (coherent)", "tok_s": 21.50}
+  ],
+  "verdicts": {
+    "speed": "dual_gpu (38.85) > single_gpu diffusion (28.98) — pick 2 Sparks for speed",
+    "resource_conservation": "single_gpu true diffusion beats single_gpu AR-simulated 1.57x on gen-heavy (28.98 vs 18.44) AND frees a node; AR competitive on short/eval prompts (21.5 vs ~16)",
+    "tradeoff": "NFE-dependent — diffusion wins as generation gets longer/gen-heavy; AR wins on short factual answers"
+  }
+}

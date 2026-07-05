@@ -19,7 +19,7 @@ The stack runs a **Mixture-of-Agents** router I call **Hermes MoA**. Every model
 The roster:
 
 - 🧠 **DeepSeek-V4-Flash · DSpark** — the **orchestrator**. It routes, aggregates, votes, and — critically — logs every decision. It's not a script; it's a served reasoning model with a custom concurrency patch so it can make hundreds of routing calls at once.
-- 🎨 **Two-Tower NVFP4 (diffusion)** — I quantized a 118 GB two-node diffusion model down to **21 GB per tower** so it fits on a *single* GPU. That freed an entire node. It handles gen-heavy batch work.
+- 🎨 **Two-Tower NVFP4 (diffusion)** — I quantized a 118 GB two-node diffusion model down to **21 GB per tower** so it fits on a *single* GPU. That freed an entire node. Honest tradeoff: on **two** Sparks the towers run in parallel and hit **38.85 tok/s** (fastest); consolidated onto **one** Spark they serialize to **~29 tok/s** — still **1.57× the autoregressive baseline on gen-heavy work (28.98 vs 18.44)**, so for resource conservation the *true* diffusion tower on one GPU beats the AR-simulated version while freeing a node. Speed wants 2 GPUs; efficiency wants 1.
 - 🎙️ **Nemotron-3-Omni** — audio + image + video + text ingest. It shares a Spark with the diffusion model (**two models, one node**) because fp4 attention + NVFP4 weights leave ~36 GB of headroom.
 - 📚 **Gemma-4-12B** — the **student**. Small enough to LoRA-train in fast epochs on one GB10.
 - ⚡ **Qwen3.6-27B-NVFP4** — the **light tier**. 256K context, ~68 tokens/sec at 8-way concurrency, native fp4 attention. It soaks up the long tail of easy requests so the brain stays free for the hard ones.

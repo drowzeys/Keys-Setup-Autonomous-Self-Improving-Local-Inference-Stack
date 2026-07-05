@@ -1,0 +1,70 @@
+{
+  "mode": "ctx",
+  "tag": "main",
+  "model": "qwen36-nvfp4-a4q",
+  "points": [
+    {
+      "target_k": 6,
+      "prompt_tokens": 5931,
+      "ttft_s": 5.222,
+      "decode_tps": 16.45,
+      "completion_tokens": 5,
+      "passkey_ok": true,
+      "tail": "7429"
+    },
+    {
+      "target_k": 16,
+      "prompt_tokens": 15963,
+      "ttft_s": 15.345,
+      "decode_tps": 14.93,
+      "completion_tokens": 5,
+      "passkey_ok": true,
+      "tail": "7429"
+    },
+    {
+      "target_k": 32,
+      "prompt_tokens": 31891,
+      "ttft_s": 33.096,
+      "decode_tps": 17.15,
+      "completion_tokens": 5,
+      "passkey_ok": true,
+      "tail": "7429"
+    },
+    {
+      "target_k": 64,
+      "prompt_tokens": 63923,
+      "ttft_s": 72.919,
+      "decode_tps": 17.32,
+      "completion_tokens": 5,
+      "passkey_ok": true,
+      "tail": "7429"
+    },
+    {
+      "target_k": 128,
+      "prompt_tokens": 127811,
+      "ttft_s": 177.944,
+      "decode_tps": 18.46,
+      "completion_tokens": 5,
+      "passkey_ok": true,
+      "tail": "7429"
+    },
+    {
+      "target_k": 192,
+      "prompt_tokens": 191787,
+      "ttft_s": 318.008,
+      "decode_tps": 19.24,
+      "completion_tokens": 5,
+      "passkey_ok": true,
+      "tail": "7429"
+    },
+    {
+      "target_k": 256,
+      "prompt_tokens": 255763,
+      "ttft_s": 489.84,
+      "decode_tps": 28.65,
+      "completion_tokens": 5,
+      "passkey_ok": true,
+      "tail": "7429"
+    }
+  ]
+}
