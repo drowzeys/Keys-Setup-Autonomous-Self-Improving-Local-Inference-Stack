@@ -117,20 +117,23 @@ MLA/DSA models like GLM-5.2.)
 
 ### c. Serve all three, co-resident (util split so the sum ≤ 0.85)
 ```bash
+# A4Q env applied to ALL three (paged-GQA → A4Q reduces long-context TTFT):
+A4Q="-e VLLM_NVFP4_A4Q=1 -e VLLM_ATTENTION_BACKEND=FLASHINFER -e FLASHINFER_DISABLE_VERSION_CHECK=1"
+
 # Brain (:8000) — the reasoner/aggregator
-docker run -d --name brain --gpus all --network host --ipc host \
+docker run -d --name brain --gpus all --network host --ipc host $A4Q \
   -v ~/models/gemma4-31b-it:/model:ro --entrypoint vllm <nvfp4-image> \
   serve /model --served-model-name gemma4-31b --quantization modelopt \
     --kv-cache-dtype nvfp4 --gpu-memory-utilization 0.28 --max-model-len 65536 --port 8000
 
 # Fast gen / perception (:8001) — DiffusionGemma
-docker run -d --name gen --gpus all --network host --ipc host \
+docker run -d --name gen --gpus all --network host --ipc host $A4Q \
   -v ~/models/diffusiongemma-26b:/model:ro --entrypoint vllm <nvfp4-image> \
   serve /model --served-model-name diffusiongemma --trust-remote-code \
     --quantization modelopt --gpu-memory-utilization 0.28 --port 8001
 
 # Light tier (:8002) — Gemma-4-12B (NVFP4 for serving)
-docker run -d --name light --gpus all --network host --ipc host \
+docker run -d --name light --gpus all --network host --ipc host $A4Q \
   -v ~/models/gemma4-12b-it:/model:ro --entrypoint vllm <nvfp4-image> \
   serve /model --served-model-name gemma4-12b --quantization modelopt \
     --kv-cache-dtype nvfp4 --gpu-memory-utilization 0.25 --max-model-len 65536 --port 8002
