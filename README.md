@@ -1,0 +1,163 @@
+# Keys-Setup — Autonomous Self-Improving Local Inference Stack
+
+### w/ LoRA training, using **Hermes MoA** assignment, for a **4× DGX Spark (GB10)** cluster
+
+> A single-operator, four-node **NVIDIA DGX Spark (GB10, 128 GB unified, sm_121a / Blackwell-consumer)** cluster wired over a **200 G MikroTik RoCE fabric**, running a **Mixture-of-Agents (Hermes MoA)** router that keeps **~90 % of all AI work on local silicon** and escalates only the residual ~10 % — deep audit, hard reasoning, frontier research — to a **rate-limited cloud model**. The stack **watches its own transcripts, mines them for supervision, and continuously LoRA-trains the local models** so that the local share *grows* over time. The orchestrator is not a script — it is a served model (**DeepSeek-V4-Flash · DSpark**) acting as router, aggregator, and training-signal collector.
+
+---
+
+## 0. Prerequisites — model roster & role on the stack
+
+| # | Model (as served) | Quant / runtime | Where it lives | Role in the stack |
+|---|---|---|---|---|
+| **1** | **DeepSeek-V4-Flash · DSpark** (spec-decode, γ=5) | FlashMLA + DSpark, TP=2 (2 replicas over 4 nodes) | Replica A `10.100.10.4↔.1`, Replica B `10.100.10.2↔.3` | **Orchestrator / Aggregator / Router.** The MoA "brain": decomposes tasks, routes to specialists, aggregates their drafts, votes, and **emits the LoRA training signal**. |
+| **2** | **True Two-Tower NVFP4** (Nemotron-Labs TwoTower-30B-A3B mask-diffusion) | NVFP4 experts (e2m1 + block-16 scale), **consolidated to ONE GPU** | `.3` cuda:0 (`twotower_single.py`) | **Parallel/batch draft & diffusion generation.** NVFP4 (21 GB/tower) collapses the old 118 GB two-node model onto a single Spark → frees a node. Diffusion wins on gen-heavy batches (≈38.9 tok/s). |
+| **3** | **Nemotron-3-Nano-Omni-30B-A3B** (+ A4Q native-fp4 attention) | NVFP4 + nvfp4 KV, A4Q prefill | co-resident on `.3:8001` (~38.9 GB) | **Omni perception front-end** — audio + vision + text ingest. Turns raw multimodal input into structured context for the router **and** into training pairs for Gemma. Runs *two-models-on-one-Spark* alongside TwoTower. |
+| **4** | **Gemma-4-12B** | BF16/LoRA fine-tune runtime | dedicated training node (rotates) | **The LoRA trainer / student.** Trains on **omni-derived** supervision (Nemotron-Omni transcribes/describes → Gemma learns). Small enough for fast LoRA epochs on one GB10; distills cloud-audit corrections back into the local stack. |
+| **5** | **Qwen-3.6-27B-NVFP4** (+ A4Q) | NVFP4 + nvfp4 KV, util 0.6 | `.4:8000` (`qwen36-nvfp4-a4q`) | **Light / high-throughput inference tier.** Cheap classify / extract / summarize / rewrite / short chat. Peak ≈ **68.6 agg tok/s @ C8**; 256 K native context. Soaks the bulk of easy requests so the brain stays free. |
+| **6** | **Cloud frontier** (Claude / Codex / Grok) — **rate-limited** | API (external) | off-cluster | **Occasional escalation only:** audit of local outputs, genuinely hard reasoning, and open-web research. Every cloud answer is captured as **gold supervision** → LoRA'd into the local stack so the *same* question is answered locally next time. |
+
+**Cluster fabric:** 4× GB10 on a MikroTik CRS804-4DDQ, 200 G-baseCR4 (RoCE, `enp1s0f1np1` / `rocep1s0f1`). Nodes `r0=.4`, `r1=.1`, `r2=.2`, `r3=.3`. Storage golden copies live on `.4/.3`; `.1/.2` are transient compute/VRAM nodes.
+
+---
+
+## 1. Architecture flow chart
+
+```mermaid
+flowchart TD
+    subgraph INPUT["🎙️ Input surface"]
+        U[User / agents / events]
+        MM[Audio · Image · Video · Text]
+    end
+
+    subgraph PERC["Perception (Spark .3 — two models, one node)"]
+        OMNI["**Nemotron-3-Omni-30B + A4Q**<br/>multimodal → structured context"]
+        TT["**True Two-Tower NVFP4**<br/>diffusion batch generation<br/>(single-GPU, 21GB/tower)"]
+    end
+
+    subgraph BRAIN["🧠 Orchestrator — DSV4F · DSpark (TP=2 ×2 replicas)"]
+        ROUTER{{"**Hermes MoA Router**<br/>classify · decompose · assign"}}
+        AGG["**Aggregator / Voter**<br/>merge drafts · self-consistency"]
+        SIG["**Training-signal collector**<br/>logs (task, route, draft, verdict)"]
+    end
+
+    subgraph LOCAL["Local specialist tier (~90% of traffic)"]
+        QWEN["**Qwen3.6-27B-NVFP4 + A4Q**<br/>light: classify/extract/summarize<br/>68 tok/s @C8 · 256K ctx"]
+        OMNI2["Omni · perception recall"]
+        TT2["TwoTower · gen-heavy batch"]
+    end
+
+    subgraph CLOUD["☁️ Cloud escalation (~10%, rate-limited)"]
+        FRONT["**Claude / Codex / Grok**<br/>audit · hard reasoning · research"]
+    end
+
+    subgraph TRAIN["🔁 Self-improvement loop"]
+        MINE["Transcript miner<br/>select high-value pairs"]
+        GEMMA["**Gemma-4-12B LoRA trainer**<br/>omni-input supervision"]
+        ADAPT["LoRA adapters →<br/>hot-swap into local models"]
+    end
+
+    U --> MM --> OMNI
+    MM --> ROUTER
+    OMNI -->|structured ctx| ROUTER
+    ROUTER -->|easy| QWEN
+    ROUTER -->|perception| OMNI2
+    ROUTER -->|batch/gen| TT
+    ROUTER -->|"hard / audit / research (10%)"| FRONT
+    QWEN --> AGG
+    OMNI2 --> AGG
+    TT --> AGG
+    FRONT --> AGG
+    AGG --> SIG
+    AGG -->|answer| U
+    SIG --> MINE
+    FRONT -->|gold labels| MINE
+    MINE --> GEMMA
+    OMNI -->|omni training pairs| GEMMA
+    GEMMA --> ADAPT
+    ADAPT -.hot-swap.-> QWEN
+    ADAPT -.hot-swap.-> OMNI2
+    ADAPT -.distill.-> ROUTER
+    ADAPT -.->|"local share ↑ over time"| ROUTER
+```
+
+---
+
+## 2. Workflow — request lifecycle
+
+1. **Ingest.** Any modality lands on **Nemotron-3-Omni** (Spark `.3`), which produces a text/structured representation (transcription, caption, OCR, scene/graph). Pure-text requests skip straight to the router.
+2. **Route (Hermes MoA).** The **DSV4F·DSpark** brain classifies the task and assigns it to the cheapest agent that can satisfy it:
+   - trivial/light → **Qwen3.6-27B** (throughput tier),
+   - perception recall / grounding → **Nemotron-Omni**,
+   - gen-heavy / parallel drafting → **Two-Tower diffusion**,
+   - genuinely hard / needs audit / needs the open web → **cloud frontier** (budget-gated).
+3. **Aggregate.** Multiple agents may answer the same prompt (MoA); the brain **votes / merges / self-consistency-checks** and returns one answer.
+4. **Log the signal.** Every `(task, chosen route, candidate drafts, final verdict, cloud correction?)` tuple is written to the training-signal store.
+5. **Escalate rarely.** The router is tuned so ≥90 % of requests never touch the cloud; the ~10 % that do are the *most informative* ones (novel/hard) — exactly the samples worth learning from.
+
+---
+
+## 3. LoRA training feedback loop (why the local share grows)
+
+The orchestrator is also the **teacher-selector**. The loop:
+
+```
+DSV4F router/aggregator ──emits──▶ (task, drafts, verdict, cloud-gold?)
+        │
+        ▼
+   Transcript miner ── picks high-value pairs:
+        • cloud-corrected answers (local was wrong → gold exists)
+        • high-agreement local wins (cheap self-distillation)
+        • omni-derived pairs (Nemotron transcript ↔ desired output)
+        │
+        ▼
+   Gemma-4-12B  ──LoRA fine-tune (omni-input aware)──▶ adapter Δ
+        │
+        ▼
+   Hot-swap adapter into the *serving* specialist (Qwen / Omni / router draft head)
+        │
+        ▼
+   Next time the same class of task arrives → answered LOCALLY, no cloud call
+```
+
+- **Gemma-4-12B is the student/trainer** because it is small enough to LoRA in fast epochs on one GB10 yet strong enough to absorb frontier corrections, and it accepts **omni-derived** inputs so multimodal lessons flow in.
+- **Cloud answers are never wasted** — each escalation buys a permanent local capability. The cloud bill trends **down** as the adapters accumulate.
+- **DSV4F is the natural signal source** because it already sees *every* task, *every* route decision, and *every* aggregate verdict — the router log *is* the training set.
+
+---
+
+## 4. Why these models (design reasoning)
+
+- **DSV4F·DSpark as brain/router.** MLA + DSpark spec-decode gives the best reasoning-tok/s on GB10, and our concurrency patch (Patch 1+2) unlocks correct batch>1 serving (≈190 tok/s @16, ≈380 @32 across both replicas). A router must handle many concurrent decisions cheaply → this is the one model that both reasons well *and* batches.
+- **Two-Tower NVFP4 consolidated to one GPU.** NVFP4 quantization of the routed experts (118 GB → 21 GB/tower) is what makes the diffusion model fit on a **single** Spark instead of two — freeing an entire node for training/serving. Diffusion beats AR on gen-heavy batches once experts are 4×-smaller per NFE.
+- **Nemotron-3-Omni + two-models-on-one-Spark.** One node hosts *both* Omni (perception) and Two-Tower (batch gen) because A4Q + NVFP4 shrink each enough (~85 GB combined of 121 GB, ~36 GB headroom) to co-reside — the cluster gets multimodal ingest "for free" without spending a node.
+- **Qwen3.6-27B-NVFP4 as the light tier.** A4Q native-fp4 attention + 256 K native context + ~68 tok/s @C8 make it the ideal high-throughput sponge for the long tail of easy requests, keeping the expensive brain idle for the hard ones.
+- **Cloud frontier, rate-limited.** Kept deliberately *small* in the traffic mix: it exists to be the **ground-truth oracle** for audit and the hardest 10 %, and — crucially — to **manufacture training labels** the local stack then internalizes.
+
+## 5. Why Hermes MoA for a hybrid setup
+
+**Mixture-of-Agents** treats each model as an *agent* with a competence profile; **Hermes** is the assignment layer that maps every incoming task to the cheapest competent agent (and, for hard tasks, to *several* agents whose drafts the brain aggregates). This is the right abstraction for a **hybrid local+cloud** system because:
+
+- **Cost-aware routing is first-class** — the "cheapest competent agent" rule is exactly what drives the 90/10 local:cloud split, and it re-balances automatically as LoRA adapters make local agents *more* competent (the cheap tier keeps winning more tasks).
+- **Aggregation gives cloud-grade answers from local models** — MoA voting across Qwen + Omni + TwoTower drafts often matches a single cloud call, so escalation is reserved for true novelty.
+- **The router log is the training corpus** — because Hermes records the (task → agent → verdict) decision for everything, the self-improvement loop gets its supervision *for free*, with no separate data-collection pipeline.
+- **Graceful degradation & swap-in** — agents can drop out (node down, model reloading) or swap adapters live without the router changing; the hybrid stays online.
+
+---
+
+## 6. Repo layout (planned)
+
+```
+.
+├── README.md                     ← this document
+├── docs/
+│   ├── architecture.md           ← flow chart + node plan
+│   ├── model-roster.md           ← per-model serve recipes & benches
+│   └── lora-loop.md              ← signal mining + Gemma training spec
+├── router/                       ← Hermes MoA config, competence profiles, cost table
+├── serve/                        ← per-model launch scripts (qwen36 / omni-a4q / twotower / dsv4f)
+├── train/                        ← transcript miner + Gemma LoRA harness + adapter hot-swap
+└── bench/                        ← concurrency + context sweeps (Qwen3.6 results included)
+```
+
+> Status: scaffolding. Serve recipes and the Qwen3.6-27B-NVFP4 A4Q benchmark (concurrency + 6K–256K context) are validated and included; router/train modules are the active build-out.
