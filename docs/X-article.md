@@ -34,9 +34,13 @@ A miner pulls the highest-value pairs out of that log:
 - **High-agreement local wins** → cheap self-distillation.
 - **Omni-derived pairs** → the multimodal front-end turns raw audio/video into supervised examples.
 
-Those pairs go to **Gemma**, which LoRA-trains on them and produces an adapter. The adapter gets **hot-swapped into the serving models**. Next time that class of task shows up, it's answered **locally** — no cloud call.
+Those pairs go to **Gemma-4-12B — the student.** It LoRA-trains on them and produces an adapter that gets **hot-swapped into the serving models**. Next time that class of task shows up, it's answered **locally** — no cloud call.
 
-**Every cloud escalation buys a permanent local capability.** The cloud bill trends *down* over time. The 90/10 split becomes 92/8 becomes 95/5 — automatically — because the "cheapest competent agent" keeps getting more competent.
+But here's the part most "local AI" setups miss: Gemma doesn't just learn better *answers*. It trains on the router's own decisions too — **which agent should handle which task** (the routing) and **which draft should win** (the aggregation). So the thing that improves isn't just the leaf models — it's the **MoA logic itself.** The router gets sharper at routing; the aggregator gets sharper at picking. The whole stack levels up, not just its parts.
+
+The whole thing is one command Hermes can run on a timer: mine its own history → LoRA-train Gemma → eval-gate → hot-swap. It literally **self-trains from its own work log.**
+
+**Every cloud escalation buys a permanent local capability.** The cloud bill trends *down* over time. The 90/10 split becomes 92/8 becomes 95/5 — automatically — because the "cheapest competent agent" keeps getting more competent, *and gets better at knowing which agent is cheapest.*
 
 ## Why this shape
 
@@ -47,7 +51,7 @@ Those pairs go to **Gemma**, which LoRA-trains on them and produces an adapter. 
 
 ## Where it stands
 
-The serving tier is validated and benchmarked (the Qwen3.6 light-tier runs coherently at 256K context with fp4 attention engaged, 0 errors across a full concurrency sweep). The router competence-profiles and the Gemma training harness are the active build-out.
+The serving tier is validated and benchmarked (the Qwen3.6 light-tier runs coherently at 256K context with fp4 attention engaged, 0 errors across a full concurrency sweep; the Two-Tower diffusion model runs as a persistent hot worker). The Gemma-4-12B LoRA self-training harness is built — miner → trainer → cycle launcher — and wired to Hermes; it goes live the moment the router starts logging its decisions.
 
 Four desktops, a group chat, and a teacher. Ask it something hard tonight, and it's a little less likely to need the cloud tomorrow.
 
@@ -71,7 +75,7 @@ Four desktops, a group chat, and a teacher. Ask it something hard tonight, and i
 ⚡ Qwen3.6-27B = light tier, 256K ctx, 68 tok/s
 ☁️ cloud = rate-limited oracle
 
-**5/** Self-improvement: the orchestrator logs every task+route+verdict. That log IS a training set. A miner pulls the best pairs (esp. ones the cloud had to correct) → Gemma LoRA-trains → adapter hot-swaps into the serving models.
+**5/** Self-improvement: the orchestrator logs every task+route+verdict. That log IS a training set. A miner pulls the best pairs (esp. ones the cloud had to correct) → Gemma-4-12B LoRA-trains → adapter hot-swaps in. And it trains on the ROUTING + AGGREGATION decisions too — so the MoA *logic* improves, not just the leaf models. One command, self-runs on a timer.
 
 **6/** Result: every cloud escalation buys a permanent local skill. The cloud bill trends DOWN. 90/10 → 92/8 → 95/5, automatically, because the cheapest agent keeps getting more competent.
 
