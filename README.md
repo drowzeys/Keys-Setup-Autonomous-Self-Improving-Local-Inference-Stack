@@ -2,6 +2,11 @@
 
 ### w/ LoRA training, using **Hermes MoA** assignment, for a **4× DGX Spark (GB10)** cluster
 
+> ### 🖥️➡️1️⃣ Only have ONE DGX Spark? → **[Single-Spark Recipe](docs/single-spark-recipe.md)**
+> Build the **same** self-improving MoA + LoRA loop on a single GB10 — all-Gemma-4 stack
+> (Gemma-4-31B brain + DiffusionGemma + Gemma-4-12B), with architecture & routing diagrams and a
+> [Hermes-consumable MoA activation plan](router/moa-plan.single-spark.json). Same logic, one box.
+
 > A single-operator, four-node **NVIDIA DGX Spark (GB10, 128 GB unified, sm_121a / Blackwell-consumer)** cluster wired over a **200 G MikroTik RoCE fabric**, running a **Mixture-of-Agents (Hermes MoA)** router that keeps **~90 % of all AI work on local silicon** and escalates only the residual ~10 % — deep audit, hard reasoning, frontier research — to a **rate-limited cloud model**. The stack **watches its own transcripts, mines them for supervision, and continuously LoRA-trains the local models** so that the local share *grows* over time. The orchestrator is not a script — it is a served model (**DeepSeek-V4-Flash · DSpark**) acting as router, aggregator, and training-signal collector.
 
 ![Hermes confirming it absorbed the full MoA stack, LoRA self-training loop, routing-log format, and reconfig target — running on deepseek-v4-flash-dspark](docs/img/hermes-moa-setup.png)
