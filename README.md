@@ -8,6 +8,12 @@
 
 *The Hermes agent (running on `deepseek-v4-flash-dspark`) confirming it has absorbed the full MoA roster, the LoRA self-training loop, the routing-log schema, and the local-first reconfig target.*
 
+> **UPDATE — 2026-07-05 19:30 UTC** — The two-hook MoA routing pipeline is now **live and allowlisted**. `routing_router.py` (pre_llm_call) classifies every task and routes to the cheapest competent agent; `routing_log.py` (post_llm_call) captures task+verdict pairs to `~/.hermes/routing_log.jsonl` for the LoRA self-training loop. The routing log is ready for `mine_signal.py` consumption — every cloud escalation is weighted 2× as gold training data.
+
+![Self-Improving LLM Hermes — It's aLIVE! The two-hook MoA routing pipeline is live: pre_llm_call classifies tasks and routes to cheapest competent agent, post_llm_call captures task+verdict pairs for the Gemma-4-12B LoRA self-training loop](docs/hermes-alive.png)
+
+*The MoA routing pipeline in action — pre_llm_call routing + post_llm_call capture feeding the Gemma-4-12B LoRA self-improvement loop.*
+
 ---
 
 ## 0. Prerequisites — model roster & role on the stack
