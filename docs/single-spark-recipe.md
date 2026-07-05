@@ -102,6 +102,19 @@ hf download google/gemma-4-12b-it            --local-dir ~/models/gemma4-12b-it
 #   modelopt PTQ → NVFP4, or grab a community NVFP4 checkpoint.
 ```
 
+### A4Q — cut long-context TTFT (recommended)
+
+All three models are **paged-GQA**, so **A4Q native-fp4 attention** applies (unlike GLM-5.2's
+MLA). A4Q accelerates the prefill QKᵀ → **lower TTFT, with the gain scaling with context**
+(measured: −6%@48K → −29%@96K → up to −39%@256K on GQA models; Gemma-4-31B ~1.44× E2E decode
+@100K). Decode is neutral. For an interactive assistant where TTFT is what the user *feels*, this
+is the highest-value knob — enable it on all three servers:
+```bash
+  -e VLLM_NVFP4_A4Q=1 -e VLLM_ATTENTION_BACKEND=FLASHINFER -e FLASHINFER_DISABLE_VERSION_CHECK=1
+```
+(needs the A4Q FlashInfer fork in the image — see the repo's A4Q notes. Does **not** apply to
+MLA/DSA models like GLM-5.2.)
+
 ### c. Serve all three, co-resident (util split so the sum ≤ 0.85)
 ```bash
 # Brain (:8000) — the reasoner/aggregator
