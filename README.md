@@ -4,6 +4,10 @@
 
 > A single-operator, four-node **NVIDIA DGX Spark (GB10, 128 GB unified, sm_121a / Blackwell-consumer)** cluster wired over a **200 G MikroTik RoCE fabric**, running a **Mixture-of-Agents (Hermes MoA)** router that keeps **~90 % of all AI work on local silicon** and escalates only the residual ~10 % — deep audit, hard reasoning, frontier research — to a **rate-limited cloud model**. The stack **watches its own transcripts, mines them for supervision, and continuously LoRA-trains the local models** so that the local share *grows* over time. The orchestrator is not a script — it is a served model (**DeepSeek-V4-Flash · DSpark**) acting as router, aggregator, and training-signal collector.
 
+![Hermes confirming it absorbed the full MoA stack, LoRA self-training loop, routing-log format, and reconfig target — running on deepseek-v4-flash-dspark](docs/img/hermes-moa-setup.png)
+
+*The Hermes agent (running on `deepseek-v4-flash-dspark`) confirming it has absorbed the full MoA roster, the LoRA self-training loop, the routing-log schema, and the local-first reconfig target.*
+
 ---
 
 ## 0. Prerequisites — model roster & role on the stack
