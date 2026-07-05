@@ -51,7 +51,7 @@ The whole thing is one command Hermes can run on a timer: mine its own history �
 
 ## Where it stands
 
-The serving tier is validated and benchmarked (the Qwen3.6 light-tier runs coherently at 256K context with fp4 attention engaged, 0 errors across a full concurrency sweep; the Two-Tower diffusion model runs as a persistent hot worker). The Gemma-4-12B LoRA self-training harness is built — miner → trainer → cycle launcher — and wired to Hermes; it goes live the moment the router starts logging its decisions.
+The serving tier is validated and benchmarked (the Qwen3.6 light-tier runs coherently at 256K context with fp4 attention engaged, 0 errors across a full concurrency sweep; the Two-Tower diffusion model runs as a persistent hot worker). The Gemma-4-12B LoRA self-training harness is built — miner → trainer → cycle launcher. The orchestrator (Hermes, running on the DSV4F model) has already ingested the full MoA roster, the routing policy, and the self-training loop, and the routing-log hook is wired into its request path — so the moment it starts serving traffic, it starts building its own training set.
 
 Four desktops, a group chat, and a teacher. Ask it something hard tonight, and it's a little less likely to need the cloud tomorrow.
 
