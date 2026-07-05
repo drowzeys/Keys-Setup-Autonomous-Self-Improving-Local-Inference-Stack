@@ -10,10 +10,10 @@ every escalation as a training label so the local share grows.**
 
 | Agent | Endpoint | API | Competence | Relative cost | MoA role |
 |---|---|---|---|---|---|
-| **DSV4F · DSpark** | `http://10.100.10.1:8000/v1` | OpenAI | reasoning, routing, aggregation, tool-planning | med (local) | **Aggregator + default** |
-| **Qwen3.6-27B-NVFP4** | `http://10.100.10.4:8000/v1` (`qwen36-nvfp4-a4q`) | OpenAI | light: classify / extract / summarize / rewrite / short chat; 256K ctx | **lowest** (local) | reference (light tier) |
-| **Nemotron-3-Omni** | `http://10.100.10.3:8001/v1` | OpenAI | multimodal ingest (audio/vision/text), perception grounding | low (local) | reference (perception) |
-| **True Two-Tower** | `http://10.100.10.3:8010/generate` | custom (not OpenAI) | gen-heavy / batch / repetitive diffusion generation | low (local) | **delegate target** (not a chat slot) |
+| **DSV4F · DSpark** | `http://r1:8000/v1` | OpenAI | reasoning, routing, aggregation, tool-planning | med (local) | **Aggregator + default** |
+| **Qwen3.6-27B-NVFP4** | `http://r0:8000/v1` (`qwen36-nvfp4-a4q`) | OpenAI | light: classify / extract / summarize / rewrite / short chat; 256K ctx | **lowest** (local) | reference (light tier) |
+| **Nemotron-3-Omni** | `http://r3:8001/v1` | OpenAI | multimodal ingest (audio/vision/text), perception grounding | low (local) | reference (perception) |
+| **True Two-Tower** | `http://r3:8010/generate` | custom (not OpenAI) | gen-heavy / batch / repetitive diffusion generation | low (local) | **delegate target** (not a chat slot) |
 | **Gemma-4-12B** | training node (rotates) | trainer | LoRA fine-tuning on omni-derived + cloud-gold pairs | n/a | **student / trainer** |
 | **Cloud frontier** | codex `gpt-5.5` / opus-4.8 / grok | OpenAI | hard reasoning, audit, open-web research | **highest** (metered) | **escalation only** |
 
@@ -28,11 +28,11 @@ Reconfigure it local-first:
 
 ```
 Reference models (the agents that draft):
-  1. custom:qwen36-nvfp4-a4q         @ http://10.100.10.4:8000/v1   # light tier
-  2. custom:nemotron-omni   @ http://10.100.10.3:8001/v1   # perception
-  (optional 3.) custom:deepseek-v4-flash-dspark @ http://10.100.10.1:8000/v1  # heavy draft
+  1. custom:qwen36-nvfp4-a4q         @ http://r0:8000/v1   # light tier
+  2. custom:nemotron-omni   @ http://r3:8001/v1   # perception
+  (optional 3.) custom:deepseek-v4-flash-dspark @ http://r1:8000/v1  # heavy draft
 Aggregator:
-  custom:deepseek-v4-flash-dspark    @ http://10.100.10.1:8000/v1   # DSV4F merges/votes
+  custom:deepseek-v4-flash-dspark    @ http://r1:8000/v1   # DSV4F merges/votes
 Fallback / escalation (only when local confidence is low):
   openai-codex:gpt-5.5  /  openrouter:anthropic/claude-opus-4.8  /  grok
 ```
@@ -83,5 +83,5 @@ cloud call whenever the local drafts agree — that alone reclaims most would-be
 - `hermes moa list` — see current slots
 - `hermes moa configure` — set the local-first preset above
 - `hermes fallback` — keep cloud here (escalation), not in the default reference set
-- Health: `curl http://10.100.10.4:8000/v1/models`, `curl http://10.100.10.3:8001/health`,
-  `curl http://10.100.10.3:8010/health`, `curl http://10.100.10.1:8000/v1/models`
+- Health: `curl http://r0:8000/v1/models`, `curl http://r3:8001/health`,
+  `curl http://r3:8010/health`, `curl http://r1:8000/v1/models`

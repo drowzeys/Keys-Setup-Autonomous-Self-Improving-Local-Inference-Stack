@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Qwen3.6-27B-NVFP4 (official nvidia weights) + A4Q native-fp4 attention on AEON vLLM 0.24.
 # A4Q port image aeon-vllm-a4q:port (jethac FlashInfer 0.6.13 fork + patched flashinfer.py).
-# Local head node spark-13b3 == 10.100.10.4. Serve on :8000, served-model-name qwen36-nvfp4-a4q.
+# Local head node spark-13b3 == r0. Serve on :8000, served-model-name qwen36-nvfp4-a4q.
 set -euo pipefail
 
 A4Q="${A4Q:-1}"                       # VLLM_NVFP4_A4Q (1=on, 0=A/B baseline)

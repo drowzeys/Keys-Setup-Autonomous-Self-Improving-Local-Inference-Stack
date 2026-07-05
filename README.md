@@ -14,20 +14,20 @@
 
 | # | Model (as served) | Quant / runtime | Where it lives | Role in the stack |
 |---|---|---|---|---|
-| **1** | **DeepSeek-V4-Flash · DSpark** (spec-decode, γ=5) | FlashMLA + DSpark, TP=2 (2 replicas over 4 nodes) | Replica A `10.100.10.4↔.1`, Replica B `10.100.10.2↔.3` | **Orchestrator / Aggregator / Router.** The MoA "brain": decomposes tasks, routes to specialists, aggregates their drafts, votes, and **emits the LoRA training signal**. |
-| **2** | **True Two-Tower NVFP4** (Nemotron-Labs TwoTower-30B-A3B mask-diffusion) | NVFP4 experts (e2m1 + block-16 scale), **consolidated to ONE GPU**, served hot | `.3:8010` (`tt-server`, persistent) | **Parallel/batch draft & diffusion generation.** NVFP4 (21 GB/tower) collapses the old 118 GB two-node model onto a single Spark → frees a node. See [§ Two-Tower: single- vs dual-GPU](#two-tower-single-gpu-vs-dual-gpu-honest-numbers) — **~29 tok/s single-GPU gen-heavy, 1.57× over the AR-simulated variant; dual-GPU is faster (38.85) if you spend the second Spark**. |
-| **3** | **Nemotron-3-Nano-Omni-30B-A3B** (+ A4Q native-fp4 attention) | NVFP4 + nvfp4 KV, A4Q prefill | co-resident on `.3:8001` (~38.9 GB) | **Omni perception front-end** — audio + vision + text ingest. Turns raw multimodal input into structured context for the router **and** into training pairs for Gemma. Runs *two-models-on-one-Spark* alongside TwoTower. |
+| **1** | **DeepSeek-V4-Flash · DSpark** (spec-decode, γ=5) | FlashMLA + DSpark, TP=2 (2 replicas over 4 nodes) | Replica A `r0↔r1`, Replica B `r2↔r3` | **Orchestrator / Aggregator / Router.** The MoA "brain": decomposes tasks, routes to specialists, aggregates their drafts, votes, and **emits the LoRA training signal**. |
+| **2** | **True Two-Tower NVFP4** (Nemotron-Labs TwoTower-30B-A3B mask-diffusion) | NVFP4 experts (e2m1 + block-16 scale), **consolidated to ONE GPU**, served hot | `r3:8010` (`tt-server`, persistent) | **Parallel/batch draft & diffusion generation.** NVFP4 (21 GB/tower) collapses the old 118 GB two-node model onto a single Spark → frees a node. See [§ Two-Tower: single- vs dual-GPU](#two-tower-single-gpu-vs-dual-gpu-honest-numbers) — **~29 tok/s single-GPU gen-heavy, 1.57× over the AR-simulated variant; dual-GPU is faster (38.85) if you spend the second Spark**. |
+| **3** | **Nemotron-3-Nano-Omni-30B-A3B** (+ A4Q native-fp4 attention) | NVFP4 + nvfp4 KV, A4Q prefill | co-resident on `r3:8001` (~38.9 GB) | **Omni perception front-end** — audio + vision + text ingest. Turns raw multimodal input into structured context for the router **and** into training pairs for Gemma. Runs *two-models-on-one-Spark* alongside TwoTower. |
 | **4** | **Gemma-4-12B** | BF16/LoRA fine-tune runtime | dedicated training node (rotates) | **The LoRA trainer / student.** Trains on **omni-derived** supervision (Nemotron-Omni transcribes/describes → Gemma learns). Small enough for fast LoRA epochs on one GB10; distills cloud-audit corrections back into the local stack. |
-| **5** | **Qwen-3.6-27B-NVFP4** (+ A4Q) | NVFP4 + nvfp4 KV, util 0.6 | `.4:8000` (`qwen36-nvfp4-a4q`) | **Light / high-throughput inference tier.** Cheap classify / extract / summarize / rewrite / short chat. Peak ≈ **68.6 agg tok/s @ C8**; 256 K native context. Soaks the bulk of easy requests so the brain stays free. |
+| **5** | **Qwen-3.6-27B-NVFP4** (+ A4Q) | NVFP4 + nvfp4 KV, util 0.6 | `r0:8000` (`qwen36-nvfp4-a4q`) | **Light / high-throughput inference tier.** Cheap classify / extract / summarize / rewrite / short chat. Peak ≈ **68.6 agg tok/s @ C8**; 256 K native context. Soaks the bulk of easy requests so the brain stays free. |
 | **6** | **Cloud frontier** (Claude / Codex / Grok) — **rate-limited** | API (external) | off-cluster | **Occasional escalation only:** audit of local outputs, genuinely hard reasoning, and open-web research. Every cloud answer is captured as **gold supervision** → LoRA'd into the local stack so the *same* question is answered locally next time. |
 
-**Cluster fabric:** 4× GB10 on a MikroTik CRS804-4DDQ, 200 G-baseCR4 (RoCE, `enp1s0f1np1` / `rocep1s0f1`). Nodes `r0=.4`, `r1=.1`, `r2=.2`, `r3=.3`. Storage golden copies live on `.4/.3`; `.1/.2` are transient compute/VRAM nodes.
+**Cluster fabric:** 4× GB10 on a MikroTik CRS804-4DDQ, 200 G-baseCR4 (RoCE, `enp1s0f1np1` / `rocep1s0f1`). Nodes `r0`–`r3` on the private 200 G fabric. Storage golden copies live on `r0`/`r3`; `r1`/`r2` are transient compute/VRAM nodes.
 
 ---
 
 ## Two-Tower: single-GPU vs dual-GPU (honest numbers)
 
-The diffusion Two-Tower can run as **two towers on two Sparks** (each tower on its own GB10, denoiser ↔ context over the 200 G fabric) or **consolidated onto one Spark** once NVFP4 shrinks each tower 59 → 21 GB. They are **not** the same on speed — measured same-session on `.3`, 256 tokens:
+The diffusion Two-Tower can run as **two towers on two Sparks** (each tower on its own GB10, denoiser ↔ context over the 200 G fabric) or **consolidated onto one Spark** once NVFP4 shrinks each tower 59 → 21 GB. They are **not** the same on speed — measured same-session on `r3`, 256 tokens:
 
 | Deployment | Config | tok/s | Note |
 |---|---|--:|---|
@@ -54,7 +54,7 @@ flowchart TD
         MM[Audio · Image · Video · Text]
     end
 
-    subgraph PERC["Perception (Spark .3 — two models, one node)"]
+    subgraph PERC["Perception (Spark r3 — two models, one node)"]
         OMNI["**Nemotron-3-Omni-30B + A4Q**<br/>multimodal → structured context"]
         TT["**True Two-Tower NVFP4**<br/>diffusion batch generation<br/>(single-GPU, 21GB/tower)"]
     end

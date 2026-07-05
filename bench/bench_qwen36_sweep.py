@@ -11,7 +11,7 @@ Modes:
 """
 import json, sys, time, threading, urllib.request
 
-BASE = "http://10.100.10.4:8000/v1/chat/completions"
+BASE = "http://r0:8000/v1/chat/completions"
 MODEL = "qwen36-nvfp4-a4q"
 
 def stream_request(messages, max_tokens, temperature=0.0, timeout=3600):
